@@ -28,10 +28,10 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
     { key: 'rollNo', label: 'Class Roll No', aliases: ['roll no', 'registration', 'id', 'class roll'] },
     { key: 'name', label: 'Full Name', aliases: ['student name', 'name', 'student'] },
     { key: 'degree', label: 'Degree', aliases: ['course', 'program', 'major'] },
-    { key: 'year', label: 'Batch/Year (Fallback)', aliases: ['year', 'batch', 'session'] }
+    { key: 'year', label: 'Batch/Year (Fallback)', aliases: ['year', 'batch', 'session'], optional: true }
   ];
 
-  const REQUIRED_FIELDS = PROFILE_FIELDS;
+  const REQUIRED_FIELDS = PROFILE_FIELDS.filter(f => !f.optional);
 
   const handleFileUpload = (e) => {
     const uploadedFile = e.target.files[0];
@@ -77,7 +77,7 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
 
   const autoMapHeaders = (headers) => {
     const initialMapping = {};
-    REQUIRED_FIELDS.forEach(field => {
+    PROFILE_FIELDS.forEach(field => {
       const fieldAliases = [field.key.toLowerCase(), ...field.aliases.map(a => a.toLowerCase())];
       const matchedHeader = headers.find(h => fieldAliases.includes(h.toLowerCase().trim()));
       initialMapping[field.key] = matchedHeader || "";
@@ -94,7 +94,7 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
     try {
       const cleanedData = rawData.map(row => {
         const newRow = {};
-        REQUIRED_FIELDS.forEach(field => {
+        PROFILE_FIELDS.forEach(field => {
           const excelHeader = mapping[field.key];
           newRow[field.key] = excelHeader && row[excelHeader] !== undefined ? String(row[excelHeader]).trim() : "";
         });
@@ -122,12 +122,20 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
         const dynamicSubjects = [];
         selectedSubjects.forEach(colHeader => {
           let cellValue = row[colHeader];
-          if (cellValue && String(cellValue).trim() !== "") {
-            dynamicSubjects.push(String(cellValue).trim());
+          if (cellValue !== undefined && String(cellValue).trim() !== "") {
+            const strVal = String(cellValue).trim();
+            if (/^(yes|y|true|1|v|checked)$/i.test(strVal)) {
+              dynamicSubjects.push(colHeader.trim());
+            } else if (!/^(no|n|false|0)$/i.test(strVal)) {
+              dynamicSubjects.push(strVal);
+            }
+          } else {
+            // Implicit assignment for empty cells under selected Subject headers
+            dynamicSubjects.push(colHeader.trim());
           }
         });
         
-        newRow.registeredSubjects = dynamicSubjects;
+        newRow.registeredSubjects = [...new Set(dynamicSubjects)];
         return newRow;
       });
 
@@ -174,10 +182,10 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-lg border border-slate-200 dark:border-slate-800">
-            {REQUIRED_FIELDS.map(field => (
+            {PROFILE_FIELDS.map(field => (
               <div key={field.key} className="flex items-center justify-between gap-4">
                 <label className="text-sm font-medium text-slate-700 dark:text-slate-300 w-1/2 flex items-center">
-                  {field.label} <span className="text-red-500 ml-1">*</span>
+                  {field.label} {!field.optional && <span className="text-red-500 ml-1">*</span>}
                 </label>
                 <Select
                   className="w-1/2"
@@ -223,13 +231,13 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
               <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
                 <thead className="text-xs text-slate-700 uppercase bg-slate-50 dark:bg-slate-800 dark:text-slate-400">
                   <tr>
-                    {REQUIRED_FIELDS.map(f => (<th key={f.key} className="px-4 py-3">{f.label}</th>))}
+                    {PROFILE_FIELDS.map(f => (<th key={f.key} className="px-4 py-3">{f.label}</th>))}
                   </tr>
                 </thead>
                 <tbody>
                   {previewData.map((row, idx) => (
                     <tr key={idx} className="bg-white border-b dark:bg-slate-900 dark:border-slate-700">
-                      {REQUIRED_FIELDS.map(field => {
+                      {PROFILE_FIELDS.map(field => {
                         const val = mapping[field.key] ? row[mapping[field.key]] : "-";
                         return <td key={field.key} className="px-4 py-2 truncate max-w-[150px]">{val}</td>;
                       })}
