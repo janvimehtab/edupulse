@@ -5,11 +5,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card'
 import { Select } from '../components/ui/Select';
 import { Skeleton } from '../components/ui/Skeleton';
 import { Button } from '../components/ui/Button';
-import { getFlattenedResults, fetchAllStudents } from '../services/firebaseConfig';
+import { getFlattenedResults, fetchAllStudents, deleteBatchByDegreeAndYear, deleteLastUpload } from '../services/firebaseConfig';
 import { cleanSubjectName } from '../utils/cleanSubject';
 import { AdminUpload } from '../components/AdminUpload';
 import { SubjectConfig } from '../components/SubjectConfig';
-import { Download, Settings2 } from 'lucide-react';
+import { Download, Settings2, Trash2, AlertTriangle, RotateCcw } from 'lucide-react';
+import { toast } from 'react-hot-toast';
+import { Input } from '../components/ui/Input';
 
 export const AdminDashboard = () => {
   const [results, setResults] = useState([]);
@@ -188,6 +190,12 @@ export const AdminDashboard = () => {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'upload' ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
               Master Upload
+            </button>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === 'settings' ? 'bg-white dark:bg-slate-900 shadow-sm text-slate-900 dark:text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
+            >
+              Settings
             </button>
           </div>
         </motion.div>
@@ -369,7 +377,7 @@ export const AdminDashboard = () => {
           </CardContent>
         </Card>
       </motion.div>
-      ) : (
+      ) : activeTab === 'upload' ? (
       <motion.div 
         key="upload"
         initial={{ opacity: 0, x: 20 }}
@@ -385,6 +393,101 @@ export const AdminDashboard = () => {
         <div className="pt-8 border-t border-slate-200 dark:border-slate-800">
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-6">Database Management</h2>
           <AdminUpload students={students} onUploadSuccess={loadData} />
+        </div>
+      </motion.div>
+      ) : (
+      <motion.div 
+        key="settings"
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: -20 }}
+        transition={{ duration: 0.2 }}
+        className="space-y-8"
+      >
+        <div className="pt-2">
+          <Card className="border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-900/10">
+            <CardHeader>
+              <CardTitle className="text-red-700 dark:text-red-400 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Danger Zone: Batch Deletion
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Permanently delete all students and their associated results that match a specific Degree and Year. This action cannot be undone.
+              </p>
+              <div className="flex flex-col md:flex-row gap-4 items-end">
+                <div className="w-full md:w-1/3">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-1">Target Degree</label>
+                  <Input id="delDegree" placeholder="e.g. BCA" className="w-full bg-white dark:bg-slate-950" />
+                </div>
+                <div className="w-full md:w-1/3">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-1">Target Year</label>
+                  <Input id="delYear" placeholder="e.g. 2025" className="w-full bg-white dark:bg-slate-950" />
+                </div>
+                <Button 
+                  variant="primary"
+                  className="w-full md:w-auto bg-red-600 hover:bg-red-700 focus:ring-red-500 text-white"
+                  onClick={async () => {
+                    const d = document.getElementById('delDegree').value.trim();
+                    const y = document.getElementById('delYear').value.trim();
+                    if(!d || !y) {
+                      toast.error("Degree and Year are required.");
+                      return;
+                    }
+                    if(window.confirm(`Are you absolutely sure you want to delete ALL students in ${d} for year ${y}?`)) {
+                      try {
+                        const res = await deleteBatchByDegreeAndYear(d, y);
+                        toast.success(`Deleted ${res.count} student records.`);
+                        if(res.count > 0) loadData();
+                      } catch(err) {
+                        toast.error("Failed to delete batch.");
+                        console.error(err);
+                      }
+                    }
+                  }}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete Cohort
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-900/10 mt-6">
+            <CardHeader>
+              <CardTitle className="text-amber-700 dark:text-amber-400 flex items-center gap-2">
+                <RotateCcw className="w-5 h-5" />
+                Revert Last Upload
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+                Delete all student records created during the most recent Master File upload. Useful if you made a mistake mapping headers.
+              </p>
+              <Button 
+                variant="primary"
+                className="bg-amber-600 hover:bg-amber-700 focus:ring-amber-500 text-white"
+                onClick={async () => {
+                  if(window.confirm('Are you certain you want to delete the data from the last uploaded file?')) {
+                    try {
+                      const res = await deleteLastUpload();
+                      if (res.success) {
+                         toast.success(`Successfully reverted ${res.count} student records.`);
+                         loadData();
+                      } else {
+                         toast.error(res.message || "Failed to revert.");
+                      }
+                    } catch(err) {
+                      toast.error("Failed to delete last upload.");
+                      console.error(err);
+                    }
+                  }
+                }}
+              >
+                <RotateCcw className="w-4 h-4 mr-2" /> Delete Last Uploaded File Data
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </motion.div>
       )}

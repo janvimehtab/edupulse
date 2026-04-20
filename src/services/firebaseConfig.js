@@ -2,7 +2,8 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
 import { 
   getFirestore, doc, getDoc, collection, getDocs, 
-  writeBatch, arrayUnion, query, where, or, and, setDoc 
+  writeBatch, arrayUnion, query, where, or, and, setDoc,
+  orderBy, limit
 } from "firebase/firestore";
 import { cleanSubjectName } from "../utils/cleanSubject";
 
@@ -102,6 +103,7 @@ export const uploadMasterStudents = async (studentList) => {
   const batch = writeBatch(db);
   const studentsRef = collection(db, 'students');
   const uniqueCleanSubjects = new Set();
+  const uploadID = Date.now().toString();
   
   studentList.forEach(student => {
     const compositeId = `${student.year}_${student.rollNo || student.registrationID}`;
@@ -118,6 +120,7 @@ export const uploadMasterStudents = async (studentList) => {
     const newDocRef = doc(studentsRef, compositeId);
     batch.set(newDocRef, { 
       ...student, 
+      uploadID,
       results: [] // initialize empty results array
     });
   });
@@ -182,4 +185,46 @@ export const appendMultipleResultsToStudent = async (docId, resultsArray) => {
   return { success: true };
 };
 
+export const deleteBatchByDegreeAndYear = async (degree, year) => {
+  const studentsRef = collection(db, 'students');
+  const q = query(studentsRef, where('degree', '==', String(degree)), where('year', '==', String(year)));
+  const snapshot = await getDocs(q);
+  
+  if (snapshot.empty) return { success: true, count: 0 };
+
+  const batch = writeBatch(db);
+  let count = 0;
+  snapshot.docs.forEach((document) => {
+    batch.delete(document.ref);
+    count++;
+  });
+
+  await batch.commit();
+  return { success: true, count };
+};
+
+export const deleteLastUpload = async () => {
+  const studentsRef = collection(db, 'students');
+  const qLatest = query(studentsRef, orderBy('uploadID', 'desc'), limit(1));
+  const snap = await getDocs(qLatest);
+  
+  if (snap.empty) return { success: false, message: "No uploads found." };
+  
+  const latestUploadID = snap.docs[0].data().uploadID;
+  if (!latestUploadID) return { success: false, message: "No upload history tracked." };
+
+  const qDelete = query(studentsRef, where('uploadID', '==', latestUploadID));
+  const deleteSnap = await getDocs(qDelete);
+  
+  if (deleteSnap.empty) return { success: false, message: "No records found for the latest upload." };
+
+  const batch = writeBatch(db);
+  let count = 0;
+  deleteSnap.docs.forEach(doc => {
+    batch.delete(doc.ref);
+    count++;
+  });
+  await batch.commit();
+  return { success: true, count };
+};
 

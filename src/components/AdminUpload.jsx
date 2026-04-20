@@ -123,18 +123,11 @@ export const AdminUpload = ({ students = [], onUploadSuccess }) => {
         selectedSubjects.forEach(colHeader => {
           let cellValue = row[colHeader];
           if (cellValue !== undefined && String(cellValue).trim() !== "") {
-            const strVal = String(cellValue).trim();
-            if (/^(yes|y|true|1|v|checked)$/i.test(strVal)) {
-              dynamicSubjects.push(colHeader.trim());
-            } else if (!/^(no|n|false|0)$/i.test(strVal)) {
-              dynamicSubjects.push(strVal);
-            }
-          } else {
-            // Implicit assignment for empty cells under selected Subject headers
-            dynamicSubjects.push(colHeader.trim());
+            dynamicSubjects.push(String(cellValue).trim());
           }
         });
         
+
         newRow.registeredSubjects = [...new Set(dynamicSubjects)];
         return newRow;
       });
